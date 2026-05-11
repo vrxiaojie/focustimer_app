@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_blue_plus: ^1.33.3
+  flutter_blue_plus: 1.35.0
   provider: ^6.1.2
   fl_chart: ^0.69.0
   shared_preferences: ^2.3.3
