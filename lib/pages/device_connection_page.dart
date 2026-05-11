@@ -15,7 +15,12 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<FocusTimerProvider>().startScan();
+      final provider = context.read<FocusTimerProvider>();
+      if (provider.connectionState != BleConnectionState.connected &&
+          provider.connectionState != BleConnectionState.connecting &&
+          !provider.isAutoReconnectRunning) {
+        provider.startScan();
+      }
     });
   }
 
@@ -29,14 +34,11 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> {
             builder: (_, provider, __) {
               return IconButton(
                 icon: provider.isScanning
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const Icon(Icons.stop)
                     : const Icon(Icons.refresh),
-                onPressed:
-                    provider.isScanning ? null : () => provider.startScan(),
+                onPressed: provider.isScanning
+                    ? () => provider.stopScan()
+                    : () => provider.startScan(),
               );
             },
           ),
