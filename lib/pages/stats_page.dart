@@ -147,7 +147,10 @@ class _StatsPageState extends State<StatsPage> {
                         });
                       },
                       icon: const Icon(Icons.calendar_month),
-                      label: Text(key),
+                      label: Text(
+                        key,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
                   ),
                 ),
@@ -170,11 +173,13 @@ class _StatsPageState extends State<StatsPage> {
                   icon: Icons.hourglass_empty,
                   label: '专注时长',
                   value: focusMinutes == null ? '--' : '${focusMinutes}分钟',
+                  color: Colors.deepOrange,
                 ),
                 _statItem(
                   icon: Icons.weekend,
                   label: '休息时长',
                   value: restMinutes == null ? '--' : '${restMinutes}分钟',
+                  color: Colors.lightBlue,
                 ),
               ],
             ),
@@ -185,11 +190,13 @@ class _StatsPageState extends State<StatsPage> {
                   icon: Icons.timer,
                   label: '专注次数',
                   value: focusCount?.toString() ?? '--',
+                  color: Colors.orange,
                 ),
                 _statItem(
                   icon: Icons.coffee,
                   label: '休息次数',
                   value: restCount?.toString() ?? '--',
+                  color: Colors.blue,
                 ),
               ],
             ),
@@ -280,11 +287,13 @@ class _StatsPageState extends State<StatsPage> {
                   icon: Icons.hourglass_empty,
                   label: '专注时长',
                   value: hasAny ? '${agg.focusMinutes}分钟' : '--',
+                  color: Colors.deepOrange,
                 ),
                 _statItem(
                   icon: Icons.weekend,
                   label: '休息时长',
                   value: hasAny ? '${agg.restMinutes}分钟' : '--',
+                  color: Colors.lightBlue,
                 ),
               ],
             ),
@@ -295,11 +304,13 @@ class _StatsPageState extends State<StatsPage> {
                   icon: Icons.timer,
                   label: '专注次数',
                   value: hasAny ? agg.focusCount.toString() : '--',
+                  color: Colors.orange,
                 ),
                 _statItem(
                   icon: Icons.coffee,
                   label: '休息次数',
                   value: hasAny ? agg.restCount.toString() : '--',
+                  color: Colors.blue,
                 ),
               ],
             ),
@@ -313,11 +324,12 @@ class _StatsPageState extends State<StatsPage> {
     required IconData icon,
     required String label,
     required String value,
+    Color color = Colors.black87,
   }) {
     return Expanded(
       child: Row(
         children: [
-          Icon(icon, size: 24),
+          Icon(icon, size: 24, color: color),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -494,6 +506,8 @@ class _StatsPageState extends State<StatsPage> {
                                   touchTooltipData: LineTouchTooltipData(
                                     getTooltipColor: (_) =>
                                         Colors.black.withOpacity(0.8),
+                                    fitInsideHorizontally: true,
+                                    fitInsideVertically: true,
                                   ),
                                 ),
                                 titlesData: _titles(series.labels,
@@ -595,6 +609,8 @@ class _StatsPageState extends State<StatsPage> {
                                   touchTooltipData: BarTouchTooltipData(
                                     getTooltipColor: (_) =>
                                         Colors.black.withOpacity(0.8),
+                                    fitInsideHorizontally: true,
+                                    fitInsideVertically: true,
                                   ),
                                 ),
                                 titlesData: _titles(series.labels,
