@@ -489,23 +489,32 @@ class _StatsPageState extends State<StatsPage> {
                                   horizontalInterval: scale.interval,
                                 ),
                                 borderData: FlBorderData(show: false),
-                                lineTouchData:
-                                    const LineTouchData(enabled: true),
+                                lineTouchData: LineTouchData(
+                                  enabled: true,
+                                  touchTooltipData: LineTouchTooltipData(
+                                    getTooltipColor: (_) =>
+                                        Colors.black.withOpacity(0.8),
+                                  ),
+                                ),
                                 titlesData: _titles(series.labels,
                                     showLeftTitles: false),
                                 lineBarsData: [
                                   LineChartBarData(
                                     spots: series.focusMinutes,
-                                    isCurved: false,
+                                    isCurved: true,
+                                    curveSmoothness: 0.45,
+                                    preventCurveOverShooting: true,
                                     barWidth: 2,
                                     color: Colors.lightBlue,
                                     dotData: const FlDotData(show: false),
                                   ),
                                   LineChartBarData(
                                     spots: series.restMinutes,
-                                    isCurved: false,
+                                    isCurved: true,
+                                    curveSmoothness: 0.35,
+                                    preventCurveOverShooting: true,
                                     barWidth: 2,
-                                    color: Colors.orange.shade300,
+                                    color: Colors.orange,
                                     dotData: const FlDotData(show: false),
                                   ),
                                 ],
@@ -581,7 +590,13 @@ class _StatsPageState extends State<StatsPage> {
                                   horizontalInterval: scale.interval,
                                 ),
                                 borderData: FlBorderData(show: false),
-                                barTouchData: BarTouchData(enabled: true),
+                                barTouchData: BarTouchData(
+                                  enabled: true,
+                                  touchTooltipData: BarTouchTooltipData(
+                                    getTooltipColor: (_) =>
+                                        Colors.black.withOpacity(0.8),
+                                  ),
+                                ),
                                 titlesData: _titles(series.labels,
                                     showLeftTitles: false),
                                 barGroups:
