@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/focus_record.dart';
 
 class BleConstants {
@@ -25,52 +27,181 @@ class BleService {
     return _device?.connectionState ?? const Stream.empty();
   }
 
-  Future<List<BluetoothDevice>> scanDevices(
-      {Duration timeout = const Duration(seconds: 10)}) async {
-    List<BluetoothDevice> foundDevices = [];
+  Future<bool> requestPermissions() async {
     try {
-      await FlutterBluePlus.startScan(timeout: timeout);
-      foundDevices = FlutterBluePlus.lastScanResults
-          .map((r) => r.device)
-          .where((d) => d.platformName.isNotEmpty || d.advName.isNotEmpty)
-          .toList();
+      final statuses = await <Permission>[
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+        Permission.locationWhenInUse,
+        Permission.location,
+      ].request();
+
+      final scan = statuses[Permission.bluetoothScan];
+      final connect = statuses[Permission.bluetoothConnect];
+      final location = statuses[Permission.locationWhenInUse] ??
+          statuses[Permission.location];
+
+      final scanGranted = scan?.isGranted ?? false;
+      final connectGranted = connect?.isGranted ?? false;
+      final locationGranted = location?.isGranted ?? false;
+
+      // Android 12+ typically requires BLUETOOTH_SCAN/CONNECT.
+      // Android 11- typically requires location permission (and location service on).
+      if (scanGranted || connectGranted) {
+        return scanGranted && connectGranted;
+      }
+      return locationGranted;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<ScanResult>> scanDevices(
+      {Duration timeout = const Duration(seconds: 10)}) async {
+    try {
+      final supported = await FlutterBluePlus.isSupported;
+      if (!supported) {
+        throw Exception('设备不支持蓝牙');
+      }
+
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) {
+        throw Exception('请先打开手机蓝牙');
+      }
+
+      // Stop any previous scan to avoid "already scanning" edge-cases.
+      FlutterBluePlus.stopScan();
+
+      // Collect results over time (reading lastScanResults immediately often returns empty).
+      final Map<String, ScanResult> uniqueResults = {};
+      final sub = FlutterBluePlus.scanResults.listen(
+        (results) {
+          for (final r in results) {
+            final id = r.device.remoteId.str;
+            final existing = uniqueResults[id];
+            if (existing == null || r.rssi > existing.rssi) {
+              uniqueResults[id] = r;
+            }
+          }
+        },
+      );
+
+      try {
+        await FlutterBluePlus.startScan();
+        await Future.delayed(timeout);
+      } finally {
+        FlutterBluePlus.stopScan();
+        await sub.cancel();
+      }
+
+      final foundResults = uniqueResults.values.toList()
+        ..sort((a, b) => b.rssi.compareTo(a.rssi));
+      return foundResults;
     } catch (e) {
       _connectionState = BleConnectionState.error;
+      rethrow;
     }
-    return foundDevices;
   }
 
   Future<bool> connectToDevice(BluetoothDevice device) async {
     _connectionState = BleConnectionState.connecting;
     try {
-      await device.connect(timeout: const Duration(seconds: 15));
+      try {
+        await device.connect(timeout: const Duration(seconds: 15));
+      } catch (_) {
+        // flutter_blue_plus may log/throw on "already connected"; treat as success
+        final state = await device.connectionState.first;
+        if (state != BluetoothConnectionState.connected) {
+          rethrow;
+        }
+      }
+
       _device = device;
       _connectionState = BleConnectionState.connected;
 
-      // Discover services
-      final services = await device.discoverServices();
-      final service = services.firstWhere(
-        (s) =>
-            s.serviceUuid.str128.toLowerCase() ==
-            BleConstants.serviceUuid.toLowerCase(),
-        orElse: () => throw Exception('Service not found'),
-      );
+      // Discover services & bind characteristics if present.
+      // IMPORTANT: absence/mismatch here should not be treated as "connection failed".
+      _charToday = null;
+      _charHistory = null;
+      try {
+        final services = await device.discoverServices();
+        final service = services.firstWhere(
+          (s) => _uuidMatches(s.serviceUuid.str128, BleConstants.serviceUuid),
+          orElse: () => services.isNotEmpty
+              ? services.first
+              : throw Exception('No services'),
+        );
 
-      for (final characteristic in service.characteristics) {
-        final uuid = characteristic.characteristicUuid.str128.toLowerCase();
-        if (uuid == BleConstants.charTodayUuid.toLowerCase()) {
-          _charToday = characteristic;
-        } else if (uuid == BleConstants.charHistoryUuid.toLowerCase()) {
-          _charHistory = characteristic;
+        for (final characteristic in service.characteristics) {
+          final uuid = characteristic.characteristicUuid.str128;
+          if (_uuidMatches(uuid, BleConstants.charTodayUuid)) {
+            _charToday = characteristic;
+          } else if (_uuidMatches(uuid, BleConstants.charHistoryUuid)) {
+            _charHistory = characteristic;
+          }
         }
+      } catch (_) {
+        // Keep connected; reads will simply return null/empty until UUIDs are corrected.
       }
 
       return true;
     } catch (e) {
       _connectionState = BleConnectionState.error;
       _device = null;
+      _charToday = null;
+      _charHistory = null;
       return false;
     }
+  }
+
+  static bool _uuidMatches(String actual, String expected) {
+    final aHex = _normalizeHex(actual);
+    final eHex = _normalizeHex(expected);
+    if (aHex.isNotEmpty && aHex.length == eHex.length && aHex == eHex) {
+      return true;
+    }
+
+    final a32 = _extract32FromUuid(actual);
+    final e32 = _extract32FromUuid(expected);
+    if (a32 != null && e32 != null && a32 == e32) {
+      return true;
+    }
+
+    final a16 = _extract16FromUuid(actual);
+    final e16 = _extract16FromUuid(expected);
+    if (a16 != null && e16 != null && a16 == e16) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static String _normalizeHex(String input) {
+    return input.toLowerCase().replaceAll(RegExp(r'[^0-9a-f]'), '');
+  }
+
+  static String? _extract16FromUuid(String uuid) {
+    final lower = uuid.toLowerCase();
+    final m = RegExp(
+      r'^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$',
+    ).firstMatch(lower);
+    if (m != null) return m.group(1);
+
+    final hex = _normalizeHex(uuid);
+    if (hex.length < 4) return null;
+    return hex.substring(hex.length - 4);
+  }
+
+  static String? _extract32FromUuid(String uuid) {
+    final lower = uuid.toLowerCase();
+    final m = RegExp(
+      r'^([0-9a-f]{8})-0000-1000-8000-00805f9b34fb$',
+    ).firstMatch(lower);
+    if (m != null) return m.group(1);
+
+    final hex = _normalizeHex(uuid);
+    if (hex.length < 8) return null;
+    return hex.substring(hex.length - 8);
   }
 
   Future<TodayData?> readTodayData() async {

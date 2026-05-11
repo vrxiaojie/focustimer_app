@@ -17,8 +17,8 @@ class FocusTimerProvider extends ChangeNotifier {
   List<FocusRecord> _historyRecords = [];
   List<FocusRecord> get historyRecords => _historyRecords;
 
-  List<BluetoothDevice> _scanResults = [];
-  List<BluetoothDevice> get scanResults => _scanResults;
+  List<ScanResult> _scanResults = [];
+  List<ScanResult> get scanResults => _scanResults;
 
   bool _isScanning = false;
   bool get isScanning => _isScanning;
@@ -60,9 +60,18 @@ class FocusTimerProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    // Request permissions first (required on Android 12+)
+    final granted = await _bleService.requestPermissions();
+    if (!granted) {
+      _errorMessage = '蓝牙/定位权限未授予';
+      _isScanning = false;
+      notifyListeners();
+      return;
+    }
+
     try {
-      final devices = await _bleService.scanDevices();
-      _scanResults = devices;
+      final results = await _bleService.scanDevices();
+      _scanResults = results;
     } catch (e) {
       _errorMessage = '扫描失败: $e';
     }

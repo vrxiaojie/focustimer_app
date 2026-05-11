@@ -93,6 +93,24 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    if (provider.errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(provider.errorMessage!, style: const TextStyle(fontSize: 18)),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => provider.startScan(),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (provider.scanResults.isEmpty) {
       return Center(
         child: Column(
@@ -102,8 +120,7 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> {
             const SizedBox(height: 16),
             const Text('未发现设备', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
-            Text('请确保 ESP32 设备已开启蓝牙',
-                style: TextStyle(color: Colors.grey[600])),
+            const Text('请确保目标设备已开启蓝牙', style: TextStyle(color: Colors.grey)),
           ],
         ),
       );
@@ -112,13 +129,15 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> {
     return ListView.builder(
       itemCount: provider.scanResults.length,
       itemBuilder: (context, index) {
-        final device = provider.scanResults[index];
+        final result = provider.scanResults[index];
+        final device = result.device;
         final name =
             device.advName.isNotEmpty ? device.advName : device.platformName;
+        final rssi = result.rssi;
         return ListTile(
           leading: const Icon(Icons.bluetooth),
-          title: Text(name.isNotEmpty ? name : '未知设备'),
-          subtitle: Text(device.remoteId.str),
+          title: Text(name.isNotEmpty ? name : device.remoteId.str),
+          subtitle: Text('${device.remoteId.str}  信号: ${rssi}dBm'),
           trailing: provider.connectionState == BleConnectionState.connecting
               ? const SizedBox(
                   width: 20,
