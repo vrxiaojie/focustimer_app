@@ -17,7 +17,7 @@ class FocusTimerApp extends StatelessWidget {
       child: MaterialApp(
         title: '专注时钟',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightBlue),
           useMaterial3: true,
         ),
         home: const MainShellPage(),
