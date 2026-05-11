@@ -29,12 +29,16 @@ class FocusTimerProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   StreamSubscription<List<ScanResult>>? _scanSub;
+  StreamSubscription<BluetoothConnectionState>? _deviceConnSub;
   Timer? _scanUiTimer;
   Timer? _scanTimeoutTimer;
   final Map<String, ScanResult> _scanMap = {};
 
   bool _autoReconnectRunning = false;
   bool get isAutoReconnectRunning => _autoReconnectRunning;
+
+  String? _lastDeviceId;
+  bool get canReconnect => (_lastDeviceId ?? '').isNotEmpty;
 
   FocusTimerProvider() {
     _loadCachedData();
@@ -43,6 +47,8 @@ class FocusTimerProvider extends ChangeNotifier {
   @override
   void dispose() {
     stopScan();
+    _deviceConnSub?.cancel();
+    _deviceConnSub = null;
     super.dispose();
   }
 
@@ -50,6 +56,7 @@ class FocusTimerProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cachedHistory = prefs.getString('cached_history');
+      _lastDeviceId = prefs.getString('last_device_id');
       if (cachedHistory != null) {
         final jsonMap = jsonDecode(cachedHistory) as Map<String, dynamic>;
         _historyRecords = (jsonMap['records'] as List<dynamic>)
@@ -107,6 +114,7 @@ class FocusTimerProvider extends ChangeNotifier {
 
       _scanSub = FlutterBluePlus.scanResults.listen((results) {
         for (final r in results) {
+          if (!_isFocusTimerDevice(r)) continue;
           final id = r.device.remoteId.str;
           final existing = _scanMap[id];
           if (existing == null || r.rssi > existing.rssi) {
@@ -159,6 +167,21 @@ class FocusTimerProvider extends ChangeNotifier {
     final success = await _bleService.connectToDevice(device);
     if (success) {
       await _saveLastConnectedDeviceId(device.remoteId.str);
+
+      // Listen for remote disconnect and reflect it in UI.
+      await _deviceConnSub?.cancel();
+      _deviceConnSub = device.connectionState.listen((state) async {
+        if (state == BluetoothConnectionState.disconnected) {
+          _errorMessage = '设备已断开';
+          try {
+            await _bleService.disconnect();
+          } catch (_) {}
+          await _deviceConnSub?.cancel();
+          _deviceConnSub = null;
+          notifyListeners();
+        }
+      });
+
       notifyListeners();
       // Auto sync data after connection
       await syncData();
@@ -170,8 +193,10 @@ class FocusTimerProvider extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    await _deviceConnSub?.cancel();
+    _deviceConnSub = null;
     await _bleService.disconnect();
-    _todayData = null;
+    // Keep cached todayData on disconnect.
     notifyListeners();
   }
 
@@ -199,6 +224,7 @@ class FocusTimerProvider extends ChangeNotifier {
 
   Future<void> _saveLastConnectedDeviceId(String id) async {
     try {
+      _lastDeviceId = id;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_device_id', id);
     } catch (_) {}
@@ -207,9 +233,76 @@ class FocusTimerProvider extends ChangeNotifier {
   Future<String?> _getLastConnectedDeviceId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('last_device_id');
+      _lastDeviceId = prefs.getString('last_device_id');
+      return _lastDeviceId;
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<void> reconnectLastDevice(
+      {Duration timeout = const Duration(seconds: 8)}) async {
+    if (connectionState == BleConnectionState.connecting) return;
+    final lastId = _lastDeviceId ?? await _getLastConnectedDeviceId();
+    if (lastId == null || lastId.isEmpty) {
+      _errorMessage = '没有可重连的设备';
+      notifyListeners();
+      return;
+    }
+
+    _errorMessage = null;
+    notifyListeners();
+
+    // Ensure permissions
+    final granted = await _bleService.requestPermissions();
+    if (!granted) {
+      _errorMessage = '蓝牙/定位权限未授予';
+      notifyListeners();
+      return;
+    }
+
+    StreamSubscription<List<ScanResult>>? sub;
+    Timer? timer;
+    try {
+      final supported = await FlutterBluePlus.isSupported;
+      if (!supported) throw Exception('设备不支持蓝牙');
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) throw Exception('请先打开手机蓝牙');
+
+      FlutterBluePlus.stopScan();
+      await FlutterBluePlus.startScan();
+
+      final completer = Completer<void>();
+      sub = FlutterBluePlus.scanResults.listen((results) async {
+        for (final r in results) {
+          if (r.device.remoteId.str == lastId) {
+            FlutterBluePlus.stopScan();
+            await sub?.cancel();
+            timer?.cancel();
+            await connectToDevice(r.device);
+            if (!completer.isCompleted) completer.complete();
+            return;
+          }
+        }
+      });
+
+      timer = Timer(timeout, () async {
+        FlutterBluePlus.stopScan();
+        await sub?.cancel();
+        if (!completer.isCompleted) completer.complete();
+      });
+
+      await completer.future;
+      if (connectionState != BleConnectionState.connected) {
+        _errorMessage = '未找到上次设备';
+        notifyListeners();
+      }
+    } catch (e) {
+      FlutterBluePlus.stopScan();
+      await sub?.cancel();
+      timer?.cancel();
+      _errorMessage = '重连失败: $e';
+      notifyListeners();
     }
   }
 
@@ -312,5 +405,12 @@ class FocusTimerProvider extends ChangeNotifier {
           date.isBefore(now.add(const Duration(days: 1)));
     }).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  static bool _isFocusTimerDevice(ScanResult result) {
+    final name = result.device.advName.isNotEmpty
+        ? result.device.advName
+        : result.device.platformName;
+    return name == 'FocusTimer';
   }
 }

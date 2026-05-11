@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/focus_timer_provider.dart';
-import 'pages/home_page.dart';
+import 'pages/main_shell_page.dart';
 
 void main() {
   runApp(const FocusTimerApp());
@@ -20,7 +20,7 @@ class FocusTimerApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
           useMaterial3: true,
         ),
-        home: const HomePage(),
+        home: const MainShellPage(),
       ),
     );
   }

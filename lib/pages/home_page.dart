@@ -12,30 +12,6 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('专注时钟'),
-        actions: [
-          Consumer<FocusTimerProvider>(
-            builder: (_, provider, __) {
-              return IconButton(
-                icon: Icon(
-                  provider.connectionState == BleConnectionState.connected
-                      ? Icons.bluetooth_connected
-                      : Icons.bluetooth_disabled,
-                  color:
-                      provider.connectionState == BleConnectionState.connected
-                          ? Colors.green
-                          : Colors.grey,
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const DeviceConnectionPage()),
-                  );
-                },
-              );
-            },
-          ),
-        ],
       ),
       body: Consumer<FocusTimerProvider>(
         builder: (_, provider, __) {
@@ -44,7 +20,7 @@ class HomePage extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _buildConnectionStatus(provider),
+                _buildConnectionStatus(context, provider),
                 const SizedBox(height: 24),
                 _buildTodayCard(provider),
                 const SizedBox(height: 24),
@@ -57,7 +33,10 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildConnectionStatus(FocusTimerProvider provider) {
+  Widget _buildConnectionStatus(
+    BuildContext context,
+    FocusTimerProvider provider,
+  ) {
     String statusText;
     Color statusColor;
 
@@ -84,9 +63,27 @@ class HomePage extends StatelessWidget {
       child: ListTile(
         leading: Icon(Icons.bluetooth, color: statusColor),
         title: Text('蓝牙状态: $statusText'),
-        trailing: TextButton(
-          onPressed: () {},
-          child: const Text('管理设备'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (provider.connectionState == BleConnectionState.disconnected &&
+                provider.canReconnect)
+              TextButton(
+                onPressed: () => provider.reconnectLastDevice(),
+                child: const Text('重连'),
+              ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DeviceConnectionPage(),
+                  ),
+                );
+              },
+              child: const Text('管理设备'),
+            ),
+          ],
         ),
       ),
     );
@@ -191,6 +188,9 @@ class HomePage extends StatelessWidget {
       );
     }
 
+    final sortedRecords = [...provider.historyRecords]
+      ..sort((a, b) => b.date.compareTo(a.date));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -199,7 +199,7 @@ class HomePage extends StatelessWidget {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        ...provider.historyRecords.map((record) => Card(
+        ...sortedRecords.map((record) => Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: const Icon(Icons.event_note),
