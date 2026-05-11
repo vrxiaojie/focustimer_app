@@ -1,0 +1,59 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code
+.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android 构建产物
+/android/.gradle/
+/android/app/build/
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+/android/local.properties
+/android/key.properties
+/android/*.jks
+/android/*.keystore
+
+# 非 Android 平台（仅保留 Android 开发）
+ios/
+macos/
+linux/
+windows/
+web/
+
+# 系统文件
+Thumbs.db
+desktop.ini
+
+# Lock 文件保留 pubspec.lock
