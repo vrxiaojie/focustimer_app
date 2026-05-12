@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'about_page.dart';
 import 'home_page.dart';
+import 'settings_page.dart';
 import 'stats_page.dart';
 
 class MainShellPage extends StatefulWidget {
@@ -22,6 +23,7 @@ class _MainShellPageState extends State<MainShellPage> {
         children: const [
           HomePage(),
           StatsPage(),
+          SettingsPage(),
           AboutPage(),
         ],
       ),
@@ -38,6 +40,11 @@ class _MainShellPageState extends State<MainShellPage> {
             icon: Icon(Icons.show_chart_outlined),
             selectedIcon: Icon(Icons.show_chart),
             label: '统计',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: '设置',
           ),
           NavigationDestination(
             icon: Icon(Icons.info_outline),

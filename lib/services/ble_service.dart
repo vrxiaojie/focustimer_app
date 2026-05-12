@@ -9,6 +9,8 @@ class BleConstants {
   static const String charTodayUuid = "00000000-0000-0000-0000-0000-0000-0001";
   static const String charHistoryUuid =
       "00000000-0000-0000-0000-0000-0000-0002";
+  static const String charTimeSyncUuid =
+      "00000000-0000-0000-0000-0000-0000-0003";
 }
 
 enum BleConnectionState { disconnected, connecting, connected, error }
@@ -17,6 +19,7 @@ class BleService {
   BluetoothDevice? _device;
   BluetoothCharacteristic? _charToday;
   BluetoothCharacteristic? _charHistory;
+  BluetoothCharacteristic? _charTimeSync;
 
   BleConnectionState _connectionState = BleConnectionState.disconnected;
   BleConnectionState get connectionState => _connectionState;
@@ -123,6 +126,7 @@ class BleService {
       // IMPORTANT: absence/mismatch here should not be treated as "connection failed".
       _charToday = null;
       _charHistory = null;
+      _charTimeSync = null;
       try {
         final services = await device.discoverServices();
         final service = services.firstWhere(
@@ -138,6 +142,8 @@ class BleService {
             _charToday = characteristic;
           } else if (_uuidMatches(uuid, BleConstants.charHistoryUuid)) {
             _charHistory = characteristic;
+          } else if (_uuidMatches(uuid, BleConstants.charTimeSyncUuid)) {
+            _charTimeSync = characteristic;
           }
         }
       } catch (_) {
@@ -150,6 +156,7 @@ class BleService {
       _device = null;
       _charToday = null;
       _charHistory = null;
+      _charTimeSync = null;
       return false;
     }
   }
@@ -229,11 +236,20 @@ class BleService {
     }
   }
 
+  Future<void> writeDeviceTimePayload(Map<String, dynamic> payload) async {
+    if (_charTimeSync == null) {
+      throw Exception('未找到时间同步特征值(0003)');
+    }
+    final bytes = utf8.encode(jsonEncode(payload));
+    await _charTimeSync!.write(bytes, withoutResponse: false);
+  }
+
   Future<void> disconnect() async {
     await _device?.disconnect();
     _device = null;
     _charToday = null;
     _charHistory = null;
+    _charTimeSync = null;
     _connectionState = BleConnectionState.disconnected;
   }
 

@@ -222,6 +222,32 @@ class FocusTimerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> syncDeviceTimeUtc8() async {
+    if (connectionState != BleConnectionState.connected) {
+      throw Exception('请先连接设备');
+    }
+
+    final utc8Now = DateTime.now().toUtc().add(const Duration(hours: 8));
+    final payload = {
+      'date': {
+        'year': utc8Now.year,
+        'month': utc8Now.month,
+        'day': utc8Now.day,
+      },
+      'time': {
+        'hour': utc8Now.hour,
+        'minute': utc8Now.minute,
+        'second': utc8Now.second,
+      },
+      'weekday': {
+        // Dart weekday: Mon=1..Sun=7, device expects Sun=0..Sat=6
+        'index': utc8Now.weekday % 7,
+      },
+    };
+
+    await _bleService.writeDeviceTimePayload(payload);
+  }
+
   Future<void> _saveLastConnectedDeviceId(String id) async {
     try {
       _lastDeviceId = id;
