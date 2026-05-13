@@ -1,16 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/focus_record.dart';
 
 class BleConstants {
+  static const int preferredMtu = 512;
   static const String serviceUuid = "00000000-0000-0000-0000-0000-0000-FFF0";
   static const String charTodayUuid = "00000000-0000-0000-0000-0000-0000-0001";
   static const String charHistoryUuid =
       "00000000-0000-0000-0000-0000-0000-0002";
   static const String charTimeSyncUuid =
       "00000000-0000-0000-0000-0000-0000-0003";
+  static const String charStartSendUuid =
+      "00000000-0000-0000-0000-0000-0000-0004";
 }
 
 enum BleConnectionState { disconnected, connecting, connected, error }
@@ -20,6 +25,7 @@ class BleService {
   BluetoothCharacteristic? _charToday;
   BluetoothCharacteristic? _charHistory;
   BluetoothCharacteristic? _charTimeSync;
+  BluetoothCharacteristic? _charStartSend;
 
   BleConnectionState _connectionState = BleConnectionState.disconnected;
   BleConnectionState get connectionState => _connectionState;
@@ -121,12 +127,14 @@ class BleService {
 
       _device = device;
       _connectionState = BleConnectionState.connected;
+      await _ensurePreferredMtu(device);
 
       // Discover services & bind characteristics if present.
       // IMPORTANT: absence/mismatch here should not be treated as "connection failed".
       _charToday = null;
       _charHistory = null;
       _charTimeSync = null;
+      _charStartSend = null;
       try {
         final services = await device.discoverServices();
         final service = services.firstWhere(
@@ -144,6 +152,8 @@ class BleService {
             _charHistory = characteristic;
           } else if (_uuidMatches(uuid, BleConstants.charTimeSyncUuid)) {
             _charTimeSync = characteristic;
+          } else if (_uuidMatches(uuid, BleConstants.charStartSendUuid)) {
+            _charStartSend = characteristic;
           }
         }
       } catch (_) {
@@ -157,6 +167,7 @@ class BleService {
       _charToday = null;
       _charHistory = null;
       _charTimeSync = null;
+      _charStartSend = null;
       return false;
     }
   }
@@ -222,18 +233,137 @@ class BleService {
   }
 
   Future<List<FocusRecord>> readHistoryData() async {
-    if (_charHistory == null) return [];
+    if (_charHistory == null || _charStartSend == null) return [];
+
     try {
-      final data = await _charHistory!.read();
-      final jsonString = String.fromCharCodes(data);
-      final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-      final records = (jsonMap['records'] as List<dynamic>)
-          .map((r) => FocusRecord.fromJson(r as Map<String, dynamic>))
-          .toList();
-      return records;
+      final jsonString = await _readHistoryJsonFromFrames();
+      return _parseHistoryRecords(jsonString);
     } catch (e) {
+      _logHistoryDebug('History frame read failed: $e');
       return [];
     }
+  }
+
+  Future<String> _readHistoryJsonFromFrames() async {
+    final historyCharacteristic = _charHistory;
+    final startSendCharacteristic = _charStartSend;
+    if (historyCharacteristic == null || startSendCharacteristic == null) {
+      throw StateError('History characteristics are unavailable');
+    }
+
+    if (!historyCharacteristic.isNotifying) {
+      await historyCharacteristic.setNotifyValue(true);
+      _logHistoryDebug('History notifications enabled');
+    }
+
+    final completer = Completer<String>();
+    final fragments = <int, String>{};
+    int? totalFrames;
+    late final StreamSubscription<List<int>> subscription;
+    final framePattern = RegExp(r'^\((\d+)/(\d+)\)(.*)$', dotAll: true);
+
+    subscription = historyCharacteristic.onValueReceived.listen(
+      (data) {
+        final frame = utf8.decode(data, allowMalformed: true);
+        final match = framePattern.firstMatch(frame);
+        if (match == null) {
+          _logHistoryDebug('Ignored malformed frame: ${jsonEncode(frame)}');
+          return;
+        }
+
+        final frameNo = int.parse(match.group(1)!);
+        final frameCount = int.parse(match.group(2)!);
+        final payload = match.group(3)!;
+
+        if (frameNo < 1 || frameNo > frameCount || frameCount <= 0) {
+          if (!completer.isCompleted) {
+            completer.completeError(
+              const FormatException('Invalid history frame index'),
+            );
+          }
+          return;
+        }
+
+        totalFrames ??= frameCount;
+        if (totalFrames != frameCount) {
+          if (!completer.isCompleted) {
+            completer.completeError(
+              const FormatException('Inconsistent history frame count'),
+            );
+          }
+          return;
+        }
+
+        fragments[frameNo] = payload;
+        _logHistoryDebug(
+          'Frame $frameNo/$frameCount received, payloadChars=${payload.length}, payload=${jsonEncode(payload)}',
+        );
+
+        if (fragments.length == totalFrames && !completer.isCompleted) {
+          final orderedPayloads = <String>[];
+          for (var index = 1; index <= totalFrames!; index++) {
+            final fragment = fragments[index];
+            if (fragment == null) {
+              completer.completeError(
+                const FormatException('Missing history frame'),
+              );
+              return;
+            }
+            orderedPayloads.add(fragment);
+          }
+
+          final jsonString = orderedPayloads.join();
+          _logHistoryDebug(
+            'History reassembled from ${fragments.length}/$totalFrames frames: ${jsonEncode(jsonString)}',
+          );
+          completer.complete(jsonString);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+    );
+
+    try {
+      _logHistoryDebug('Requesting history transfer from device');
+      await startSendCharacteristic.write(const [0x01], withoutResponse: false);
+      return await completer.future.timeout(const Duration(seconds: 30));
+    } finally {
+      await subscription.cancel();
+      if (historyCharacteristic.isNotifying) {
+        try {
+          await historyCharacteristic.setNotifyValue(false);
+          _logHistoryDebug('History notifications disabled');
+        } catch (_) {}
+      }
+    }
+  }
+
+  List<FocusRecord> _parseHistoryRecords(String jsonString) {
+    final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+    final records = (jsonMap['records'] as List<dynamic>)
+        .map((r) => FocusRecord.fromJson(r as Map<String, dynamic>))
+        .toList();
+    _logHistoryDebug('Parsed history records count: ${records.length}');
+    return records;
+  }
+
+  Future<void> _ensurePreferredMtu(BluetoothDevice device) async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      final mtu = await device.requestMtu(BleConstants.preferredMtu);
+      _logHistoryDebug(
+          'Requested MTU ${BleConstants.preferredMtu}, negotiated MTU $mtu');
+    } catch (e) {
+      _logHistoryDebug('Request MTU ${BleConstants.preferredMtu} failed: $e');
+    }
+  }
+
+  void _logHistoryDebug(String message) {
+    if (!kDebugMode) return;
+    debugPrint('[BLE][history] $message');
   }
 
   Future<void> writeDeviceTimePayload(Map<String, dynamic> payload) async {
@@ -250,6 +380,7 @@ class BleService {
     _charToday = null;
     _charHistory = null;
     _charTimeSync = null;
+    _charStartSend = null;
     _connectionState = BleConnectionState.disconnected;
   }
 
