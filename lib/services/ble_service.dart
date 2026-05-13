@@ -251,11 +251,6 @@ class BleService {
       throw StateError('History characteristics are unavailable');
     }
 
-    if (!historyCharacteristic.isNotifying) {
-      await historyCharacteristic.setNotifyValue(true);
-      _logHistoryDebug('History notifications enabled');
-    }
-
     final completer = Completer<String>();
     final fragments = <int, String>{};
     int? totalFrames;
@@ -327,6 +322,16 @@ class BleService {
     );
 
     try {
+      if (historyCharacteristic.isNotifying) {
+        await historyCharacteristic.setNotifyValue(false);
+        _logHistoryDebug('History notifications reset before refresh');
+        await Future.delayed(const Duration(milliseconds: 120));
+      }
+
+      await historyCharacteristic.setNotifyValue(true);
+      _logHistoryDebug('History notifications enabled for one-shot refresh');
+      await Future.delayed(const Duration(milliseconds: 180));
+
       _logHistoryDebug('Requesting history transfer from device');
       await startSendCharacteristic.write(const [0x01], withoutResponse: false);
       return await completer.future.timeout(const Duration(seconds: 30));
