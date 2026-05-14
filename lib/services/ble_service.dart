@@ -16,6 +16,8 @@ class BleConstants {
       "00000000-0000-0000-0000-0000-0000-0003";
   static const String charStartSendUuid =
       "00000000-0000-0000-0000-0000-0000-0004";
+  static const String charPowerSettingsUuid =
+      "00000000-0000-0000-0000-0000-0000-0005";
 }
 
 enum BleConnectionState { disconnected, connecting, connected, error }
@@ -26,6 +28,7 @@ class BleService {
   BluetoothCharacteristic? _charHistory;
   BluetoothCharacteristic? _charTimeSync;
   BluetoothCharacteristic? _charStartSend;
+  BluetoothCharacteristic? _charPowerSettings;
 
   BleConnectionState _connectionState = BleConnectionState.disconnected;
   BleConnectionState get connectionState => _connectionState;
@@ -135,6 +138,7 @@ class BleService {
       _charHistory = null;
       _charTimeSync = null;
       _charStartSend = null;
+      _charPowerSettings = null;
       try {
         final services = await device.discoverServices();
         final service = services.firstWhere(
@@ -154,6 +158,8 @@ class BleService {
             _charTimeSync = characteristic;
           } else if (_uuidMatches(uuid, BleConstants.charStartSendUuid)) {
             _charStartSend = characteristic;
+          } else if (_uuidMatches(uuid, BleConstants.charPowerSettingsUuid)) {
+            _charPowerSettings = characteristic;
           }
         }
       } catch (_) {
@@ -168,6 +174,7 @@ class BleService {
       _charHistory = null;
       _charTimeSync = null;
       _charStartSend = null;
+      _charPowerSettings = null;
       return false;
     }
   }
@@ -379,6 +386,28 @@ class BleService {
     await _charTimeSync!.write(bytes, withoutResponse: false);
   }
 
+  Future<Map<String, dynamic>> readPowerSettingsPayload() async {
+    if (_charPowerSettings == null) {
+      throw Exception('未找到电源设置特征值(0005)');
+    }
+
+    final data = await _charPowerSettings!.read();
+    final jsonString = utf8.decode(data, allowMalformed: true).trim();
+    final decoded = jsonDecode(jsonString);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('电源设置数据格式错误');
+    }
+    return decoded;
+  }
+
+  Future<void> writePowerSettingsPayload(Map<String, dynamic> payload) async {
+    if (_charPowerSettings == null) {
+      throw Exception('未找到电源设置特征值(0005)');
+    }
+    final bytes = utf8.encode(jsonEncode(payload));
+    await _charPowerSettings!.write(bytes, withoutResponse: false);
+  }
+
   Future<void> disconnect() async {
     await _device?.disconnect();
     _device = null;
@@ -386,6 +415,7 @@ class BleService {
     _charHistory = null;
     _charTimeSync = null;
     _charStartSend = null;
+    _charPowerSettings = null;
     _connectionState = BleConnectionState.disconnected;
   }
 

@@ -248,6 +248,20 @@ class FocusTimerProvider extends ChangeNotifier {
     await _bleService.writeDeviceTimePayload(payload);
   }
 
+  Future<Map<String, dynamic>> readPowerSettings() async {
+    if (connectionState != BleConnectionState.connected) {
+      throw Exception('请先连接设备');
+    }
+    return _bleService.readPowerSettingsPayload();
+  }
+
+  Future<void> writePowerSettings(Map<String, dynamic> payload) async {
+    if (connectionState != BleConnectionState.connected) {
+      throw Exception('请先连接设备');
+    }
+    await _bleService.writePowerSettingsPayload(payload);
+  }
+
   Future<void> _saveLastConnectedDeviceId(String id) async {
     try {
       _lastDeviceId = id;
