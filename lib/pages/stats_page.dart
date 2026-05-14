@@ -172,13 +172,13 @@ class _StatsPageState extends State<StatsPage> {
                 _statItem(
                   icon: Icons.hourglass_empty,
                   label: '专注时长',
-                  value: focusMinutes == null ? '--' : '${focusMinutes}分钟',
+                  value: focusMinutes == null ? '--' : '$focusMinutes分钟',
                   color: Colors.deepOrange,
                 ),
                 _statItem(
                   icon: Icons.weekend,
                   label: '休息时长',
-                  value: restMinutes == null ? '--' : '${restMinutes}分钟',
+                  value: restMinutes == null ? '--' : '$restMinutes分钟',
                   color: Colors.lightBlue,
                 ),
               ],
@@ -780,7 +780,7 @@ class _StatsPageState extends State<StatsPage> {
 
       final index = (_selectedDay.day - 1).clamp(0, 1000000);
       const visibleCount = 7;
-      final centerIndex = (visibleCount ~/ 2);
+      const centerIndex = (visibleCount ~/ 2);
       final desired = (index - centerIndex) * pointWidth;
       final maxScroll = math.max(0.0, chartWidth - viewportWidth);
       final clamped = desired.clamp(0.0, maxScroll);
@@ -862,7 +862,7 @@ class _StatsPageState extends State<StatsPage> {
 
     for (var m = 1; m <= 12; m++) {
       final i = m - 1;
-      labels.add('${m}月');
+      labels.add('$m月');
       final agg = byMonth[m]!;
       focusMinutes.add(FlSpot(i.toDouble(), agg.focusMinutes.toDouble()));
       restMinutes.add(FlSpot(i.toDouble(), agg.restMinutes.toDouble()));

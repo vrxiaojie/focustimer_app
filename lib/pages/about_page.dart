@@ -25,12 +25,12 @@ class AboutPage extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            Text(
+            const Text(
               _appName,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            Text(
+            const Text(
               _description,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -45,14 +45,14 @@ class AboutPage extends StatelessWidget {
             _AboutLineCard(
               title: 'B站',
               value: _bilibiliUrl,
-              leading: _AssetLogo(assetPath: _bilibiliLogoAsset),
+              leading: const _AssetLogo(assetPath: _bilibiliLogoAsset),
               valueMaxLines: 2,
               onTap: () => _openUrl(context, _bilibiliUrl),
             ),
             _AboutLineCard(
               title: 'GitHub',
               value: _githubUrl,
-              leading: _AssetLogo(assetPath: _githubLogoAsset),
+              leading: const _AssetLogo(assetPath: _githubLogoAsset),
               valueMaxLines: 2,
               onTap: () => _openUrl(context, _githubUrl),
             ),

@@ -114,15 +114,15 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> {
     }
 
     if (provider.scanResults.isEmpty) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.bluetooth_searching, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('未发现设备', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 8),
-            const Text('请确保目标设备已开启蓝牙', style: TextStyle(color: Colors.grey)),
+            Icon(Icons.bluetooth_searching, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('未发现设备', style: TextStyle(fontSize: 18)),
+            SizedBox(height: 8),
+            Text('请确保目标设备已开启蓝牙', style: TextStyle(color: Colors.grey)),
           ],
         ),
       );
