@@ -1,0 +1,55 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+          channel: 'stable'
+
+      - name: 📦 Install dependencies
+        run: flutter pub get
+
+      - name: 🏗️ Build APK
+        run: flutter build apk --release
+
+      - name: 📤 Rename APK and set version
+        run: |
+          # Extract version from pubspec.yaml (e.g. "version: 1.0.0")
+          VERSION=$(grep '^version: ' pubspec.yaml | sed 's/version: //' | sed 's/+.*//' | tr -d ' ')
+          echo "Version extracted: $VERSION"
+          cp build/app/outputs/flutter-apk/app-release.apk "focustimer_v${VERSION}.apk"
+          echo "APK renamed to focustimer_v${VERSION}.apk"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "APK_PATH=focustimer_v${VERSION}.apk" >> $GITHUB_ENV
+
+      - name: ⬆️ Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: focustimer_v${{ env.VERSION }}
+          path: ${{ env.APK_PATH }}
+
+      - name: 🏷️ Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: focustimer v${{ env.VERSION }}
+          body: |
+            ## focustimer v${{ env.VERSION }}
+
+            Auto-generated release from commit ${{ github.sha }}.
+          files: ${{ env.APK_PATH }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
