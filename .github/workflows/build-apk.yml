@@ -26,6 +26,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: '3.24.3'
 
       - name: 📦 Install dependencies
         run: flutter pub get
@@ -34,17 +35,20 @@ jobs:
         run: |
           # CI 使用 setup-java 提供的 JDK，移除本地 gradle.properties 中的 JDK 路径
           sed -i '/^org\.gradle\.java\.home/d' android/gradle.properties
-          flutter build apk --release
+          # 固定仅构建 arm/arm64，避免额外打包 x86_64 导致体积膨胀
+          flutter build apk --release --target-platform android-arm,android-arm64
 
       - name: 📤 Rename APK and set version
         run: |
           # Extract version from pubspec.yaml (e.g. "version: 1.0.0")
           VERSION=$(grep '^version: ' pubspec.yaml | sed 's/version: //' | sed 's/+.*//' | tr -d ' ')
           echo "Version extracted: $VERSION"
-          cp build/app/outputs/flutter-apk/app-release.apk "focustimer_v${VERSION}.apk"
-          echo "APK renamed to focustimer_v${VERSION}.apk"
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/focustimer_v${VERSION}.apk"
+          echo "APK renamed to dist/focustimer_v${VERSION}.apk"
+
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "APK_PATH=focustimer_v${VERSION}.apk" >> $GITHUB_ENV
+          echo "APK_PATH=dist/focustimer_v${VERSION}.apk" >> $GITHUB_ENV
 
       - name: ⬆️ Upload APK as artifact
         uses: actions/upload-artifact@v4
