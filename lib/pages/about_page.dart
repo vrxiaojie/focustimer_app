@@ -74,9 +74,7 @@ class AboutPage extends StatelessWidget {
       future: PackageInfo.fromPlatform(),
       builder: (context, snapshot) {
         final info = snapshot.data;
-        final versionText = info == null
-            ? '--'
-            : '${info.version}${info.buildNumber.isNotEmpty ? '+${info.buildNumber}' : ''}';
+        final versionText = info == null ? '--' : info.version;
         return _AboutLineCard(
           title: '版本',
           value: versionText,
