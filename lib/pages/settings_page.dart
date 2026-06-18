@@ -325,9 +325,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 dateText: dateText,
                 timeText: timeText,
                 weekdayLabel: weekdayLabel,
-              ),
-              const SizedBox(height: 12),
-              _buildWriteTimeCard(
                 connected: connected,
                 provider: provider,
               ),
@@ -347,6 +344,8 @@ class _SettingsPageState extends State<SettingsPage> {
     required String dateText,
     required String timeText,
     required String weekdayLabel,
+    required bool connected,
+    required FocusTimerProvider provider,
   }) {
     return Card(
       child: Padding(
@@ -364,27 +363,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _kvLine('时间', timeText),
             const SizedBox(height: 8),
             _kvLine('星期', weekdayLabel),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWriteTimeCard({
-    required bool connected,
-    required FocusTimerProvider provider,
-  }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '写入设备时间',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             Text(
               connected ? '设备已连接，可写入时间。' : '请先连接设备后再写入时间。',
               style: TextStyle(
