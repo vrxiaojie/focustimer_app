@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
   );
   bool _lowPowerEnabled = false;
   bool _autoSleepEnabled = true;
+  Map<String, dynamic>? _lastAppliedPowerSettings;
 
   DateTime get _utc8Now => DateTime.now().toUtc().add(const Duration(hours: 8));
 
@@ -89,17 +89,9 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final payload = await provider.readPowerSettings();
       if (!mounted) return;
-      setState(() {
-        _startTimeController.text = _normalizeTimeValue(payload['start_time']);
-        _stopTimeController.text = _normalizeTimeValue(payload['stop_time']);
-        _lowPowerEnabled = _normalizeBoolFlag(payload['low_power']);
-        _autoSleepEnabled = _normalizeBoolFlag(payload['auto_sleep']);
-        _chargeThreshController.text =
-            _normalizeChargeThreshold(payload['charge_thresh']);
-      });
-      _refreshTimeBubbleMessages();
+      _applyPowerSettingsPayload(payload);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('读取成功')),
+        const SnackBar(content: Text('读取成功')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -127,7 +119,7 @@ class _SettingsPageState extends State<SettingsPage> {
       await provider.writePowerSettings(payload);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('发送成功')),
+        const SnackBar(content: Text('发送成功')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -249,6 +241,48 @@ class _SettingsPageState extends State<SettingsPage> {
     return null;
   }
 
+  void _applyPowerSettingsPayload(Map<String, dynamic> payload) {
+    setState(() {
+      _lastAppliedPowerSettings = Map<String, dynamic>.from(payload);
+      _startTimeController.text = _normalizeTimeValue(payload['start_time']);
+      _stopTimeController.text = _normalizeTimeValue(payload['stop_time']);
+      _lowPowerEnabled = _normalizeBoolFlag(payload['low_power']);
+      _autoSleepEnabled = _normalizeBoolFlag(payload['auto_sleep']);
+      _chargeThreshController.text =
+          _normalizeChargeThreshold(payload['charge_thresh']);
+    });
+    _refreshTimeBubbleMessages();
+  }
+
+  void _applyProviderPowerSettingsIfNeeded(FocusTimerProvider provider) {
+    final payload = provider.powerSettingsPayload;
+    if (payload == null ||
+        _mapsHaveSameStringValues(payload, _lastAppliedPowerSettings)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final latestPayload = provider.powerSettingsPayload;
+      if (latestPayload == null ||
+          _mapsHaveSameStringValues(latestPayload, _lastAppliedPowerSettings)) {
+        return;
+      }
+      _applyPowerSettingsPayload(latestPayload);
+    });
+  }
+
+  bool _mapsHaveSameStringValues(
+    Map<String, dynamic>? a,
+    Map<String, dynamic>? b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null || a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (entry.value?.toString() != b[entry.key]?.toString()) return false;
+    }
+    return true;
+  }
+
   String _normalizeTimeValue(Object? value) {
     final digits = value?.toString() ?? '';
     return digits.padLeft(4, '0');
@@ -282,6 +316,7 @@ class _SettingsPageState extends State<SettingsPage> {
         builder: (_, provider, __) {
           final connected =
               provider.connectionState == BleConnectionState.connected;
+          _applyProviderPowerSettingsIfNeeded(provider);
 
           return ListView(
             padding: const EdgeInsets.all(16),

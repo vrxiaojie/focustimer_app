@@ -19,6 +19,11 @@ class FocusTimerProvider extends ChangeNotifier {
   List<FocusRecord> _historyRecords = [];
   List<FocusRecord> get historyRecords => _historyRecords;
 
+  Map<String, dynamic>? _powerSettingsPayload;
+  Map<String, dynamic>? get powerSettingsPayload => _powerSettingsPayload == null
+      ? null
+      : Map<String, dynamic>.unmodifiable(_powerSettingsPayload!);
+
   List<ScanResult> _scanResults = [];
   List<ScanResult> get scanResults => _scanResults;
 
@@ -183,7 +188,8 @@ class FocusTimerProvider extends ChangeNotifier {
       });
 
       notifyListeners();
-      // Auto sync data after connection
+      // Auto sync device settings and data after connection.
+      await _readPowerSettingsAfterConnect();
       await syncData();
     } else {
       _errorMessage = '连接失败';
@@ -252,7 +258,10 @@ class FocusTimerProvider extends ChangeNotifier {
     if (connectionState != BleConnectionState.connected) {
       throw Exception('请先连接设备');
     }
-    return _bleService.readPowerSettingsPayload();
+    final payload = await _bleService.readPowerSettingsPayload();
+    _powerSettingsPayload = Map<String, dynamic>.from(payload);
+    notifyListeners();
+    return Map<String, dynamic>.unmodifiable(_powerSettingsPayload!);
   }
 
   Future<void> writePowerSettings(Map<String, dynamic> payload) async {
@@ -260,6 +269,16 @@ class FocusTimerProvider extends ChangeNotifier {
       throw Exception('请先连接设备');
     }
     await _bleService.writePowerSettingsPayload(payload);
+    _powerSettingsPayload = Map<String, dynamic>.from(payload);
+    notifyListeners();
+  }
+
+  Future<void> _readPowerSettingsAfterConnect() async {
+    try {
+      await readPowerSettings();
+    } catch (_) {
+      // Keep the device connected even if settings are unavailable or unreadable.
+    }
   }
 
   Future<void> _saveLastConnectedDeviceId(String id) async {
