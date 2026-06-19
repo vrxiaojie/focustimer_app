@@ -20,9 +20,16 @@ class FocusTimerProvider extends ChangeNotifier {
   List<FocusRecord> get historyRecords => _historyRecords;
 
   Map<String, dynamic>? _powerSettingsPayload;
-  Map<String, dynamic>? get powerSettingsPayload => _powerSettingsPayload == null
-      ? null
-      : Map<String, dynamic>.unmodifiable(_powerSettingsPayload!);
+  Map<String, dynamic>? get powerSettingsPayload =>
+      _powerSettingsPayload == null
+          ? null
+          : Map<String, dynamic>.unmodifiable(_powerSettingsPayload!);
+
+  Map<String, dynamic>? _focusRestSettingsPayload;
+  Map<String, dynamic>? get focusRestSettingsPayload =>
+      _focusRestSettingsPayload == null
+          ? null
+          : Map<String, dynamic>.unmodifiable(_focusRestSettingsPayload!);
 
   List<ScanResult> _scanResults = [];
   List<ScanResult> get scanResults => _scanResults;
@@ -190,6 +197,7 @@ class FocusTimerProvider extends ChangeNotifier {
       notifyListeners();
       // Auto sync device settings and data after connection.
       await _readPowerSettingsAfterConnect();
+      await _readFocusRestSettingsAfterConnect();
       await syncData();
     } else {
       _errorMessage = '连接失败';
@@ -273,9 +281,36 @@ class FocusTimerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Map<String, dynamic>> readFocusRestSettings() async {
+    if (connectionState != BleConnectionState.connected) {
+      throw Exception('请先连接设备');
+    }
+    final payload = await _bleService.readFocusRestSettingsPayload();
+    _focusRestSettingsPayload = Map<String, dynamic>.from(payload);
+    notifyListeners();
+    return Map<String, dynamic>.unmodifiable(_focusRestSettingsPayload!);
+  }
+
+  Future<void> writeFocusRestSettings(Map<String, dynamic> payload) async {
+    if (connectionState != BleConnectionState.connected) {
+      throw Exception('请先连接设备');
+    }
+    await _bleService.writeFocusRestSettingsPayload(payload);
+    _focusRestSettingsPayload = Map<String, dynamic>.from(payload);
+    notifyListeners();
+  }
+
   Future<void> _readPowerSettingsAfterConnect() async {
     try {
       await readPowerSettings();
+    } catch (_) {
+      // Keep the device connected even if settings are unavailable or unreadable.
+    }
+  }
+
+  Future<void> _readFocusRestSettingsAfterConnect() async {
+    try {
+      await readFocusRestSettings();
     } catch (_) {
       // Keep the device connected even if settings are unavailable or unreadable.
     }

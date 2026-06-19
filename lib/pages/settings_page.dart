@@ -18,9 +18,13 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _isWriting = false;
   bool _isReadingPowerSettings = false;
   bool _isWritingPowerSettings = false;
+  bool _isReadingFocusRestSettings = false;
+  bool _isWritingFocusRestSettings = false;
   String? _startTimeBubbleMessage;
   String? _stopTimeBubbleMessage;
   String? _chargeThreshErrorMessage;
+  String? _focusMinErrorMessage;
+  String? _restMinErrorMessage;
   late DateTime _currentUtc8;
   Timer? _clockTimer;
   final TextEditingController _startTimeController = TextEditingController(
@@ -32,9 +36,16 @@ class _SettingsPageState extends State<SettingsPage> {
   final TextEditingController _chargeThreshController = TextEditingController(
     text: '85',
   );
+  final TextEditingController _focusMinController = TextEditingController(
+    text: '25',
+  );
+  final TextEditingController _restMinController = TextEditingController(
+    text: '5',
+  );
   bool _lowPowerEnabled = false;
   bool _autoSleepEnabled = true;
   Map<String, dynamic>? _lastAppliedPowerSettings;
+  Map<String, dynamic>? _lastAppliedFocusRestSettings;
 
   DateTime get _utc8Now => DateTime.now().toUtc().add(const Duration(hours: 8));
 
@@ -56,6 +67,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _startTimeController.dispose();
     _stopTimeController.dispose();
     _chargeThreshController.dispose();
+    _focusMinController.dispose();
+    _restMinController.dispose();
     super.dispose();
   }
 
@@ -133,6 +146,55 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _readFocusRestSettings(FocusTimerProvider provider) async {
+    setState(() => _isReadingFocusRestSettings = true);
+    try {
+      final payload = await provider.readFocusRestSettings();
+      if (!mounted) return;
+      _applyFocusRestSettingsPayload(payload);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('读取成功')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('读取失败: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isReadingFocusRestSettings = false);
+      }
+    }
+  }
+
+  Future<void> _writeFocusRestSettings(FocusTimerProvider provider) async {
+    try {
+      final payload = _buildFocusRestSettingsPayload();
+      if (payload == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请先修正输入错误后再发送')),
+        );
+        return;
+      }
+
+      setState(() => _isWritingFocusRestSettings = true);
+      await provider.writeFocusRestSettings(payload);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('发送成功')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('发送失败: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isWritingFocusRestSettings = false);
+      }
+    }
+  }
+
   Map<String, dynamic>? _buildPowerSettingsPayload() {
     final startTime = _normalizeTimeInput(_startTimeController.text, '关屏开始时间');
     final stopTime = _normalizeTimeInput(_stopTimeController.text, '关屏结束时间');
@@ -165,6 +227,39 @@ class _SettingsPageState extends State<SettingsPage> {
     };
   }
 
+  Map<String, dynamic>? _buildFocusRestSettingsPayload() {
+    final focusMin = _normalizeMinuteInput(
+      _focusMinController.text,
+      allowZero: false,
+    );
+    final restMin = _normalizeMinuteInput(
+      _restMinController.text,
+      allowZero: false,
+    );
+
+    setState(() {
+      _focusMinErrorMessage = _buildMinuteErrorMessage(
+        _focusMinController.text,
+        '专注时间',
+        allowZero: false,
+      );
+      _restMinErrorMessage = _buildMinuteErrorMessage(
+        _restMinController.text,
+        '休息时间',
+        allowZero: false,
+      );
+    });
+
+    if (focusMin == null || restMin == null) {
+      return null;
+    }
+
+    return {
+      'focus_min': focusMin,
+      'rest_min': restMin,
+    };
+  }
+
   String? _normalizeTimeInput(String input, String fieldLabel) {
     final digits = input.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length != 4) {
@@ -187,6 +282,15 @@ class _SettingsPageState extends State<SettingsPage> {
     return value;
   }
 
+  int? _normalizeMinuteInput(String input, {required bool allowZero}) {
+    final value = int.tryParse(input.trim());
+    final minValue = allowZero ? 0 : 1;
+    if (value == null || value < minValue || value > 100) {
+      return null;
+    }
+    return value;
+  }
+
   void _refreshTimeBubbleMessages() {
     if (!mounted) return;
 
@@ -201,6 +305,23 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       _chargeThreshErrorMessage = _buildThresholdErrorMessage(
         _chargeThreshController.text,
+      );
+    });
+  }
+
+  void _refreshFocusRestErrorMessages() {
+    if (!mounted) return;
+
+    setState(() {
+      _focusMinErrorMessage = _buildMinuteErrorMessage(
+        _focusMinController.text,
+        '专注时间',
+        allowZero: false,
+      );
+      _restMinErrorMessage = _buildMinuteErrorMessage(
+        _restMinController.text,
+        '休息时间',
+        allowZero: false,
       );
     });
   }
@@ -241,6 +362,27 @@ class _SettingsPageState extends State<SettingsPage> {
     return null;
   }
 
+  String? _buildMinuteErrorMessage(
+    String input,
+    String label, {
+    required bool allowZero,
+  }) {
+    final digits = input.trim();
+    if (digits.isEmpty) {
+      return null;
+    }
+
+    final value = int.tryParse(digits);
+    final minValue = allowZero ? 0 : 1;
+    if (value == null) {
+      return '$label 需为整数分钟';
+    }
+    if (value < minValue || value > 100) {
+      return '$label 范围为$minValue-100分钟';
+    }
+    return null;
+  }
+
   void _applyPowerSettingsPayload(Map<String, dynamic> payload) {
     setState(() {
       _lastAppliedPowerSettings = Map<String, dynamic>.from(payload);
@@ -252,6 +394,21 @@ class _SettingsPageState extends State<SettingsPage> {
           _normalizeChargeThreshold(payload['charge_thresh']);
     });
     _refreshTimeBubbleMessages();
+  }
+
+  void _applyFocusRestSettingsPayload(Map<String, dynamic> payload) {
+    setState(() {
+      _lastAppliedFocusRestSettings = Map<String, dynamic>.from(payload);
+      _focusMinController.text = _normalizeMinuteValue(
+        payload['focus_min'],
+        fallback: '25',
+      );
+      _restMinController.text = _normalizeMinuteValue(
+        payload['rest_min'],
+        fallback: '5',
+      );
+    });
+    _refreshFocusRestErrorMessages();
   }
 
   void _applyProviderPowerSettingsIfNeeded(FocusTimerProvider provider) {
@@ -268,6 +425,26 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
       _applyPowerSettingsPayload(latestPayload);
+    });
+  }
+
+  void _applyProviderFocusRestSettingsIfNeeded(FocusTimerProvider provider) {
+    final payload = provider.focusRestSettingsPayload;
+    if (payload == null ||
+        _mapsHaveSameStringValues(payload, _lastAppliedFocusRestSettings)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final latestPayload = provider.focusRestSettingsPayload;
+      if (latestPayload == null ||
+          _mapsHaveSameStringValues(
+            latestPayload,
+            _lastAppliedFocusRestSettings,
+          )) {
+        return;
+      }
+      _applyFocusRestSettingsPayload(latestPayload);
     });
   }
 
@@ -299,6 +476,12 @@ class _SettingsPageState extends State<SettingsPage> {
     return numeric.toString();
   }
 
+  String _normalizeMinuteValue(Object? value, {required String fallback}) {
+    final numeric = int.tryParse(value?.toString() ?? '');
+    if (numeric == null) return fallback;
+    return numeric.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = _currentUtc8;
@@ -317,6 +500,7 @@ class _SettingsPageState extends State<SettingsPage> {
           final connected =
               provider.connectionState == BleConnectionState.connected;
           _applyProviderPowerSettingsIfNeeded(provider);
+          _applyProviderFocusRestSettingsIfNeeded(provider);
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -325,6 +509,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 dateText: dateText,
                 timeText: timeText,
                 weekdayLabel: weekdayLabel,
+                connected: connected,
+                provider: provider,
+              ),
+              const SizedBox(height: 12),
+              _buildFocusRestSettingsCard(
                 connected: connected,
                 provider: provider,
               ),
@@ -386,6 +575,101 @@ class _SettingsPageState extends State<SettingsPage> {
                     : const Icon(Icons.schedule_send),
                 label: Text(_isWriting ? '写入中...' : '写入当前时间到设备'),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFocusRestSettingsCard({
+    required bool connected,
+    required FocusTimerProvider provider,
+  }) {
+    final busy = _isReadingFocusRestSettings || _isWritingFocusRestSettings;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '专注/休息时间',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              connected ? '设置设备的专注分钟和休息分钟。' : '请先连接设备后再读取或发送。',
+              style: TextStyle(
+                color: connected ? Colors.green : Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildLabeledTextField(
+              controller: _focusMinController,
+              label: '专注时间',
+              hintText: '25',
+              enabled: connected && !busy,
+              errorText: _focusMinErrorMessage,
+              helperText: '范围为1-100分钟',
+              onChanged: (_) => _refreshFocusRestErrorMessages(),
+              suffixText: '分钟',
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildLabeledTextField(
+              controller: _restMinController,
+              label: '休息时间',
+              hintText: '5',
+              enabled: connected && !busy,
+              errorText: _restMinErrorMessage,
+              helperText: '范围为1-100分钟',
+              onChanged: (_) => _refreshFocusRestErrorMessages(),
+              suffixText: '分钟',
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: (!connected || busy)
+                        ? null
+                        : () => _readFocusRestSettings(provider),
+                    icon: _isReadingFocusRestSettings
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download),
+                    label: Text(_isReadingFocusRestSettings ? '读取中...' : '读取'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: (!connected || busy)
+                        ? null
+                        : () => _writeFocusRestSettings(provider),
+                    icon: _isWritingFocusRestSettings
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.upload),
+                    label: Text(_isWritingFocusRestSettings ? '发送中...' : '发送'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
