@@ -10,6 +10,7 @@ class UpdateCheckResult {
     required this.hasUpdate,
     required this.releaseUrl,
     this.releaseName,
+    this.releaseBody,
   });
 
   final String currentVersion;
@@ -17,6 +18,7 @@ class UpdateCheckResult {
   final bool hasUpdate;
   final String releaseUrl;
   final String? releaseName;
+  final String? releaseBody;
 }
 
 class UpdateService {
@@ -65,6 +67,7 @@ class UpdateService {
 
       final releaseUrl = json['html_url']?.toString().trim();
       final releaseName = json['name']?.toString().trim();
+      final releaseBody = json['body']?.toString().trim();
       final latestVersion = normalizeVersionTag(tagName);
 
       return UpdateCheckResult(
@@ -76,6 +79,8 @@ class UpdateService {
             : releaseUrl,
         releaseName:
             releaseName == null || releaseName.isEmpty ? null : releaseName,
+        releaseBody:
+            releaseBody == null || releaseBody.isEmpty ? null : releaseBody,
       );
     } on TimeoutException {
       throw const UpdateCheckException('检查更新超时，请检查网络后重试');

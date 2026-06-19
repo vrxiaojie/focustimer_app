@@ -122,24 +122,26 @@ class _AboutPageState extends State<AboutPage> {
         await showDialog<void>(
           context: context,
           builder: (dialogContext) {
+            final releaseBody = result.releaseBody ?? '该版本暂无更新说明。';
             return AlertDialog(
-              title: const Text('发现新版本'),
-              content: Text(
-                '当前版本：${result.currentVersion}\n'
-                '最新版本：${result.latestVersion}\n\n'
-                '是否打开 GitHub 发布页查看更新？',
+              title: Text('发现新版本 ${result.latestVersion}'),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: SingleChildScrollView(
+                  child: Text(releaseBody),
+                ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('稍后'),
+                  child: const Text('取消'),
                 ),
                 FilledButton(
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
                     _openUrl(result.releaseUrl);
                   },
-                  child: const Text('打开发布页'),
+                  child: const Text('更新'),
                 ),
               ],
             );
