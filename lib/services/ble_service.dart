@@ -18,6 +18,8 @@ class BleConstants {
       "00000000-0000-0000-0000-0000-0000-0004";
   static const String charPowerSettingsUuid =
       "00000000-0000-0000-0000-0000-0000-0005";
+  static const String charFocusRestSettingsUuid =
+      "00000000-0000-0000-0000-0000-0000-0006";
 }
 
 enum BleConnectionState { disconnected, connecting, connected, error }
@@ -29,6 +31,7 @@ class BleService {
   BluetoothCharacteristic? _charTimeSync;
   BluetoothCharacteristic? _charStartSend;
   BluetoothCharacteristic? _charPowerSettings;
+  BluetoothCharacteristic? _charFocusRestSettings;
 
   BleConnectionState _connectionState = BleConnectionState.disconnected;
   BleConnectionState get connectionState => _connectionState;
@@ -139,6 +142,7 @@ class BleService {
       _charTimeSync = null;
       _charStartSend = null;
       _charPowerSettings = null;
+      _charFocusRestSettings = null;
       try {
         final services = await device.discoverServices();
         final service = services.firstWhere(
@@ -160,6 +164,11 @@ class BleService {
             _charStartSend = characteristic;
           } else if (_uuidMatches(uuid, BleConstants.charPowerSettingsUuid)) {
             _charPowerSettings = characteristic;
+          } else if (_uuidMatches(
+            uuid,
+            BleConstants.charFocusRestSettingsUuid,
+          )) {
+            _charFocusRestSettings = characteristic;
           }
         }
       } catch (_) {
@@ -175,6 +184,7 @@ class BleService {
       _charTimeSync = null;
       _charStartSend = null;
       _charPowerSettings = null;
+      _charFocusRestSettings = null;
       return false;
     }
   }
@@ -408,6 +418,30 @@ class BleService {
     await _charPowerSettings!.write(bytes, withoutResponse: false);
   }
 
+  Future<Map<String, dynamic>> readFocusRestSettingsPayload() async {
+    if (_charFocusRestSettings == null) {
+      throw Exception('未找到专注/休息时间特征值(0006)');
+    }
+
+    final data = await _charFocusRestSettings!.read();
+    final jsonString = utf8.decode(data, allowMalformed: true).trim();
+    final decoded = jsonDecode(jsonString);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('专注/休息时间数据格式错误');
+    }
+    return decoded;
+  }
+
+  Future<void> writeFocusRestSettingsPayload(
+    Map<String, dynamic> payload,
+  ) async {
+    if (_charFocusRestSettings == null) {
+      throw Exception('未找到专注/休息时间特征值(0006)');
+    }
+    final bytes = utf8.encode(jsonEncode(payload));
+    await _charFocusRestSettings!.write(bytes, withoutResponse: false);
+  }
+
   Future<void> disconnect() async {
     await _device?.disconnect();
     _device = null;
@@ -416,6 +450,7 @@ class BleService {
     _charTimeSync = null;
     _charStartSend = null;
     _charPowerSettings = null;
+    _charFocusRestSettings = null;
     _connectionState = BleConnectionState.disconnected;
   }
 
